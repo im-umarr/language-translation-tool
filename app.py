@@ -1,6 +1,6 @@
 
 import streamlit as st
-from deep_translator import GoogleTranslator
+import requests
 
 st.set_page_config(
     page_title="Language Translation Tool",
@@ -32,16 +32,12 @@ col1, col2 = st.columns(2)
 
 with col1:
     source_language = st.selectbox(
-        "Translate from",
-        list(languages.keys()),
-        index=0
+        "Translate from", list(languages.keys()), index=0
     )
 
 with col2:
     target_language = st.selectbox(
-        "Translate to",
-        list(languages.keys()),
-        index=1
+        "Translate to", list(languages.keys()), index=1
     )
 
 text_input = st.text_area(
@@ -61,25 +57,41 @@ if st.button("Translate", type="primary", use_container_width=True):
     else:
         try:
             with st.spinner("Translating your text..."):
-                translator = GoogleTranslator(
-                    source=languages[source_language],
-                    target=languages[target_language]
+                response = requests.get(
+                    "https://api.mymemory.translated.net/get",
+                    params={
+                        "q": text_input,
+                        "langpair": (
+                            f"{languages[source_language]}|"
+                            f"{languages[target_language]}"
+                        )
+                    },
+                    timeout=30
                 )
-                translated_text = translator.translate(text_input)
+
+                response.raise_for_status()
+                data = response.json()
+
+                if data.get("responseStatus") != 200:
+                    raise ValueError(
+                        data.get("responseDetails", "Translation failed.")
+                    )
+
+                translated_text = data.get(
+                    "responseData", {}
+                ).get("translatedText", "")
+
+                if not translated_text:
+                    raise ValueError("No translation was returned.")
 
             st.subheader("Translated Text")
             st.text_area(
                 "Translation result",
-                value=translated_text or "",
+                value=translated_text,
                 height=150
             )
-
-            if translated_text:
-                st.success("Translation completed successfully!")
+            st.success("Translation completed successfully!")
 
         except Exception as error:
-            st.error(
-                "Translation failed. Please check your internet "
-                "connection and try again."
-            )
-            st.caption(f"Technical details: {error}")
+            st.error("Translation failed. Please try again.")
+            st.caption(f"Details: {error}")
